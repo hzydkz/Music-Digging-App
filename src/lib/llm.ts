@@ -5,10 +5,11 @@ export type Effort = "low" | "medium" | "high" | "xhigh" | "max";
 export function llmConfig() {
   const effort = (process.env.LLM_EFFORT?.trim() || "medium") as Effort;
   return {
-    model: process.env.LLM_MODEL?.trim() || "claude-opus-5",
+    model: process.env.LLM_MODEL?.trim() || "claude-sonnet-5",
     effort,
-    // 안전 분류기에 의해 거절(refusal)되면 서버가 다른 모델로 재시도한다. "off"로 끌 수 있다.
-    fallbacks: process.env.LLM_FALLBACKS?.trim() !== "off",
+    // 안전 분류기에 의해 거절(refusal)되면 서버가 다른 모델로 재시도한다. 기본은 꺼짐, "on"으로 켠다.
+    // Sonnet 5에서 fallbacks: "default"가 허용되는지 확인되지 않아 기본값을 꺼 둔다.
+    fallbacks: process.env.LLM_FALLBACKS?.trim() === "on",
   };
 }
 

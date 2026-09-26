@@ -26,9 +26,9 @@
 | `DISCOGS_TOKEN` | ✓ | ✓ | Discogs → Settings → Developers → Generate token |
 | `MB_CONTACT` | ✓ | ✓ | MusicBrainz User-Agent에 들어갈 연락처(이메일 등). MusicBrainz 요청 규칙 |
 | `MONTHLY_BUDGET_USD` | 선택 | 선택 | 예: `10`. 이번 달 추정 비용이 넘으면 생성 전에 경고 |
-| `LLM_MODEL` | 선택 | 선택 | 기본 `claude-opus-5`. 비용을 줄이려면 `claude-sonnet-5` |
+| `LLM_MODEL` | 선택 | 선택 | 기본 `claude-sonnet-5`. 품질이 부족하면 `claude-opus-5` |
 | `LLM_EFFORT` | 선택 | 선택 | 기본 `medium` (`low`/`medium`/`high`) |
-| `LLM_FALLBACKS` | 선택 | 선택 | 기본 켜짐. `off`로 끄기 |
+| `LLM_FALLBACKS` | 선택 | 선택 | 기본 꺼짐. `on`이면 요청이 거절될 때 다른 모델로 재시도 (Opus 5에서 권장) |
 | `LLM_PRICE_INPUT_PER_MTOK`, `LLM_PRICE_OUTPUT_PER_MTOK` | 선택 | 선택 | 단가가 바뀌었을 때 비용 추정 보정용 |
 
 3. 환경변수를 넣은 뒤 Deployments → 최신 배포 → Redeploy.
