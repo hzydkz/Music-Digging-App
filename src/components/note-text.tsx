@@ -16,31 +16,37 @@ export function NoteText({ text, sources }: { text: string; sources: NoteSource[
 
   function inline(line: string, key: string) {
     const parts = line.split(/(\[[^\]\n]{1,40}\])/g);
-    return parts.map((p, i) => {
+    const out: React.ReactNode[] = [];
+    for (let i = 0; i < parts.length; i++) {
+      const p = parts[i];
       const m = p.match(/^\[([^\]]+)\]$/);
-      if (m) {
-        const labels = m[1].split(/\s*[,/]\s*/);
-        if (labels.every((l) => byLabel.has(l.toLowerCase()))) {
-          return (
-            <Fragment key={`${key}-${i}`}>
-              {labels.map((l) => {
-                const s = byLabel.get(l.toLowerCase())!;
-                return s.url ? (
-                  <a key={l} href={s.url} target="_blank" rel="noreferrer" className="cite">
-                    {s.label}
-                  </a>
-                ) : (
-                  <span key={l} className="cite">
-                    {s.label}
-                  </span>
-                );
-              })}
-            </Fragment>
-          );
-        }
+      const labels = m ? m[1].split(/\s*[,/]\s*/) : [];
+      if (m && labels.every((l) => byLabel.has(l.toLowerCase()))) {
+        // 배지 바로 뒤의 문장부호는 배지와 붙여서 혼자 다음 줄로 넘어가지 않게 한다.
+        const punct = parts[i + 1]?.match(/^[.,;:!?)\]。、」』]+/)?.[0] ?? "";
+        if (punct) parts[i + 1] = parts[i + 1].slice(punct.length);
+        out.push(
+          <span key={`${key}-${i}`} className="whitespace-nowrap">
+            {labels.map((l) => {
+              const s = byLabel.get(l.toLowerCase())!;
+              return s.url ? (
+                <a key={l} href={s.url} target="_blank" rel="noreferrer" className="cite">
+                  {s.label}
+                </a>
+              ) : (
+                <span key={l} className="cite">
+                  {s.label}
+                </span>
+              );
+            })}
+            {punct}
+          </span>,
+        );
+        continue;
       }
-      return <Fragment key={`${key}-${i}`}>{p.replace(/\*\*(.+?)\*\*/g, "$1")}</Fragment>;
-    });
+      out.push(<Fragment key={`${key}-${i}`}>{p.replace(/\*\*(.+?)\*\*/g, "$1")}</Fragment>);
+    }
+    return out;
   }
 
   return (
