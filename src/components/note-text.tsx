@@ -22,9 +22,18 @@ export function NoteText({ text, sources }: { text: string; sources: NoteSource[
       const m = p.match(/^\[([^\]]+)\]$/);
       const labels = m ? m[1].split(/\s*[,/]\s*/) : [];
       if (m && labels.every((l) => byLabel.has(l.toLowerCase()))) {
-        // 배지 바로 뒤의 문장부호는 배지와 붙여서 혼자 다음 줄로 넘어가지 않게 한다.
+        // "…했다 [Wikipedia]." → "…했다. [Wikipedia]": 배지 뒤 문장부호를 배지 앞으로 옮긴다.
         const punct = parts[i + 1]?.match(/^[.,;:!?)\]。、」』]+/)?.[0] ?? "";
-        if (punct) parts[i + 1] = parts[i + 1].slice(punct.length);
+        if (punct) {
+          parts[i + 1] = parts[i + 1].slice(punct.length);
+          const prev = out.length - 1;
+          // 배지 앞의 공백은 문장부호 뒤로 보낸다 ("했다 ." 방지)
+          const before = typeof parts[i - 1] === "string" ? parts[i - 1] : "";
+          if (/\s$/.test(before) && prev >= 0) {
+            out[prev] = <Fragment key={`${key}-${i - 1}`}>{before.replace(/\s+$/, "").replace(/\*\*(.+?)\*\*/g, "$1")}</Fragment>;
+          }
+          out.push(<Fragment key={`${key}-${i}-p`}>{punct} </Fragment>);
+        }
         out.push(
           <span key={`${key}-${i}`} className="whitespace-nowrap">
             {labels.map((l) => {
@@ -39,7 +48,6 @@ export function NoteText({ text, sources }: { text: string; sources: NoteSource[
                 </span>
               );
             })}
-            {punct}
           </span>,
         );
         continue;

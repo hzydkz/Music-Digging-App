@@ -3,6 +3,7 @@ import { and, eq } from "drizzle-orm";
 import { credits, jobs, notes, releases, sourceRaw, usage } from "@/db/schema";
 import type { DB } from "@/db/client";
 import * as pipeline from "@/lib/pipeline";
+import { listLibrary, notedIds } from "@/lib/queries";
 import { acquireSlot } from "@/lib/rate-limit";
 import { fixture, testDb } from "./helpers";
 
@@ -102,8 +103,14 @@ describe("pipeline", () => {
     await pipeline.importReleaseGroup(db, RG);
     expect(calls.length).toBe(before);
 
+    // 열어 보기만 한 앨범은 라이브러리에 없다
+    expect(await listLibrary(db)).toHaveLength(0);
+
     expect(await pipeline.startNote(db, RG)).toEqual({ ok: true });
+    expect((await listLibrary(db)).map((r) => r.id)).toEqual([RG]);
+    expect(await notedIds(db, [RG])).toEqual(new Set());
     expect(await runAll(db, RG)).toEqual(["fetch:wikipedia", "fetch:discogs", "summarize:album"]);
+    expect(await notedIds(db, [RG])).toEqual(new Set([RG]));
 
     // Discogs는 release url-rel(1234567)을 master보다 우선 사용
     expect(calls.some((u) => u.includes("/masters/"))).toBe(false);
@@ -206,6 +213,8 @@ describe("pipeline", () => {
 
     expect(await pipeline.getManualPrompt(db, RG)).toBeNull(); // 서술 자료 수집 전
     expect(await pipeline.startNote(db, RG, { mode: "manual" })).toEqual({ ok: true });
+    // 수동 모드로 자료를 모으기 시작하면 노트가 없어도 라이브러리에 보인다
+    expect(await listLibrary(db)).toHaveLength(1);
     expect(await runAll(db, RG)).toEqual(["fetch:wikipedia", "fetch:discogs"]);
     expect(generateAlbumNote).not.toHaveBeenCalled();
     expect((await db.query.releases.findFirst({ where: eq(releases.id, RG) }))?.noteStatus).toBe("none");

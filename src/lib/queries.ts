@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import type { DB } from "@/db/client";
 import { credits, jobs, notes, persons, releases, sourceRaw, tracks } from "@/db/schema";
 import { ENTITY } from "./pipeline";
@@ -19,16 +19,26 @@ export async function listLibrary(db: DB): Promise<LibraryItem[]> {
       coverUrl: releases.coverUrl,
     })
     .from(releases)
+    .where(inLibrary)
     .orderBy(desc(releases.lastViewedAt))
     .limit(200);
 }
 
-export async function savedIds(db: DB, ids: string[]): Promise<Set<string>> {
+/**
+ * 라이브러리에 보이는 조건: 노트가 있거나, "자료 모으기"를 한 번이라도 눌렀다.
+ * 검색 후보를 열어 보기만 한 앨범(메타데이터만 저장됨)은 제외한다.
+ */
+const inLibrary = sql`(${releases.noteStatus} != 'none' OR EXISTS (
+  SELECT 1 FROM ${jobs} WHERE ${jobs.entityType} = ${ENTITY} AND ${jobs.entityId} = ${releases.id}
+))`;
+
+/** 검색 결과 중 이미 노트가 있는 앨범 */
+export async function notedIds(db: DB, ids: string[]): Promise<Set<string>> {
   if (!ids.length) return new Set();
   const rows = await db
     .select({ id: releases.id })
     .from(releases)
-    .where(inArray(releases.id, ids));
+    .where(and(inArray(releases.id, ids), eq(releases.noteStatus, "ready")));
   return new Set(rows.map((r) => r.id));
 }
 

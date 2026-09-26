@@ -42,10 +42,6 @@ export function Navigator({ onClose, inline = false }: { onClose?: () => void; i
   }
 
   async function open(c: Candidate) {
-    if (c.saved) {
-      router.push(`/release/${c.mbid}`);
-      return;
-    }
     setOpening(c.mbid);
     setError(null);
     try {
@@ -128,7 +124,7 @@ export function Navigator({ onClose, inline = false }: { onClose?: () => void; i
                     <span className="font-medium leading-snug">
                       {c.title}
                       {c.saved && (
-                        <span className="ml-2 rounded bg-surface-2 px-1.5 py-0.5 text-xs text-muted">저장됨</span>
+                        <span className="ml-2 rounded bg-surface-2 px-1.5 py-0.5 text-xs text-muted">노트 있음</span>
                       )}
                     </span>
                     <span className="text-sm text-muted">

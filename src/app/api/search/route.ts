@@ -1,6 +1,6 @@
 import { getDb } from "@/db/client";
 import { handle, jsonError } from "@/lib/api";
-import { savedIds } from "@/lib/queries";
+import { notedIds } from "@/lib/queries";
 import { searchReleaseGroups } from "@/sources/musicbrainz";
 
 export async function GET(req: Request) {
@@ -9,7 +9,7 @@ export async function GET(req: Request) {
   return handle(async () => {
     const db = getDb();
     const results = await searchReleaseGroups(db, q);
-    const saved = await savedIds(db, results.map((r) => r.mbid));
+    const saved = await notedIds(db, results.map((r) => r.mbid));
     return { results: results.map((r) => ({ ...r, saved: saved.has(r.mbid) })) };
   });
 }
