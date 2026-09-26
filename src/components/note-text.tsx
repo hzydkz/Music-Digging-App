@@ -30,7 +30,7 @@ export function NoteText({ text, sources }: { text: string; sources: NoteSource[
           // 배지 앞의 공백은 문장부호 뒤로 보낸다 ("했다 ." 방지)
           const before = typeof parts[i - 1] === "string" ? parts[i - 1] : "";
           if (/\s$/.test(before) && prev >= 0) {
-            out[prev] = <Fragment key={`${key}-${i - 1}`}>{before.replace(/\s+$/, "").replace(/\*\*(.+?)\*\*/g, "$1")}</Fragment>;
+            out[prev] = <Fragment key={`${key}-${i - 1}`}>{emphasis(before.replace(/\s+$/, ""), `${key}-${i - 1}`)}</Fragment>;
           }
           out.push(<Fragment key={`${key}-${i}-p`}>{punct} </Fragment>);
         }
@@ -52,7 +52,7 @@ export function NoteText({ text, sources }: { text: string; sources: NoteSource[
         );
         continue;
       }
-      out.push(<Fragment key={`${key}-${i}`}>{p.replace(/\*\*(.+?)\*\*/g, "$1")}</Fragment>);
+      out.push(<Fragment key={`${key}-${i}`}>{emphasis(p, `${key}-${i}`)}</Fragment>);
     }
     return out;
   }
@@ -85,3 +85,18 @@ export function NoteText({ text, sources }: { text: string; sources: NoteSource[
     </div>
   );
 }
+
+/**
+ * 마크다운 강조 표시: **굵게** → <strong>, *기울임* / _기울임_ → <em>.
+ * 여는 표시 바로 뒤와 닫는 표시 바로 앞이 공백이면 강조로 보지 않는다 ("2 * 3 * 4" 같은 경우).
+ */
+const EMPHASIS = /(\*\*[^*\n]+?\*\*|\*(?![\s*])[^*\n]*?[^\s*]\*|\*[^\s*]\*|(?<![A-Za-z0-9])_(?![\s_])[^_\n]*?[^\s_]_(?![A-Za-z0-9]))/gu;
+
+export function emphasis(text: string, key: string): React.ReactNode[] {
+  return text.split(EMPHASIS).map((part, i) => {
+    if (i % 2 === 0) return part;
+    if (part.startsWith("**")) return <strong key={`${key}-e${i}`}>{part.slice(2, -2)}</strong>;
+    return <em key={`${key}-e${i}`}>{part.slice(1, -1)}</em>;
+  });
+}
+
