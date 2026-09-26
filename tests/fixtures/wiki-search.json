@@ -1,0 +1,9 @@
+{
+  "query": {
+    "search": [
+      { "title": "Blue (Joni Mitchell album)", "snippet": "<span class=\"searchmatch\">Blue</span> is the fourth studio album" },
+      { "title": "Blue (Weezer album)", "snippet": "commonly known as the <span>Blue</span> Album" },
+      { "title": "Blue (LeAnn Rimes album)", "snippet": "debut album" }
+    ]
+  }
+}

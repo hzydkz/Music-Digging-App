@@ -1,0 +1,23 @@
+{
+  "id": "rel-jp",
+  "title": "OK Computer",
+  "date": "1997-05-21",
+  "label-info": [
+    { "label": { "name": "Parlophone" }, "catalog-number": "7243 8 55229 2 5" },
+    { "label": { "name": "Parlophone" }, "catalog-number": "NODATA 02" },
+    { "label": { "name": "Capitol" } }
+  ],
+  "media": [
+    { "position": 1, "tracks": [
+      { "number": "1", "position": 1, "title": "Airbag", "length": 284000 },
+      { "number": "2", "position": 2, "title": "Paranoid Android", "length": 383000 }
+    ] },
+    { "position": 2, "tracks": [
+      { "number": "1", "position": 1, "title": "Bonus", "length": null }
+    ] }
+  ],
+  "relations": [
+    { "type": "producer", "target-type": "artist", "artist": { "id": "p-1", "name": "Nigel Godrich" }, "attributes": [] },
+    { "type": "discogs", "target-type": "url", "url": { "resource": "https://www.discogs.com/release/1234567-Radiohead-OK-Computer" } }
+  ]
+}

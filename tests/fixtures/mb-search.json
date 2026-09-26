@@ -1,0 +1,27 @@
+{
+  "created": "2026-01-01T00:00:00.000Z",
+  "count": 2,
+  "offset": 0,
+  "release-groups": [
+    {
+      "id": "b1392450-e666-3926-a536-22c65f834433",
+      "score": 100,
+      "title": "OK Computer",
+      "primary-type": "Album",
+      "first-release-date": "1997-05-21",
+      "artist-credit": [{ "name": "Radiohead", "artist": { "id": "a74b1b7f-71a5-4011-9441-d0b5e4122711", "name": "Radiohead" } }]
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "score": 71,
+      "title": "OK Computer OKNOTOK 1997 2017",
+      "primary-type": "Album",
+      "secondary-types": ["Compilation"],
+      "first-release-date": "2017",
+      "artist-credit": [
+        { "name": "Radiohead", "joinphrase": " & ", "artist": { "id": "a74b1b7f-71a5-4011-9441-d0b5e4122711", "name": "Radiohead" } },
+        { "name": "Guest", "artist": { "id": "00000000-0000-0000-0000-0000000000aa", "name": "Guest" } }
+      ]
+    }
+  ]
+}

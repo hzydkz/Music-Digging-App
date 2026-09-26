@@ -1,0 +1,21 @@
+{
+  "id": 1234567,
+  "title": "OK Computer",
+  "year": 1997,
+  "uri": "https://www.discogs.com/release/1234567-Radiohead-OK-Computer",
+  "artists": [{ "id": 3840, "name": "Radiohead" }],
+  "labels": [{ "name": "Parlophone", "catno": "NODATA 02" }],
+  "genres": ["Electronic", "Rock"],
+  "styles": ["Alternative Rock"],
+  "extraartists": [
+    { "id": 100, "name": "Nigel Godrich", "role": "Producer", "tracks": "" },
+    { "id": 101, "name": "Stanley Donwood (2)", "role": "Artwork", "tracks": "" }
+  ],
+  "tracklist": [
+    { "position": "1", "title": "Airbag", "type_": "track" },
+    { "position": "2", "title": "Paranoid Android", "type_": "track", "extraartists": [
+      { "id": 102, "name": "Jonny Greenwood", "role": "Organ" }
+    ] }
+  ],
+  "notes": "Recorded at Canned Applause and St Catherine's Court."
+}

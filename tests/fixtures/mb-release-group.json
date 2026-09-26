@@ -1,0 +1,22 @@
+{
+  "id": "b1392450-e666-3926-a536-22c65f834433",
+  "title": "OK Computer",
+  "primary-type": "Album",
+  "first-release-date": "1997-05-21",
+  "artist-credit": [{ "name": "Radiohead", "artist": { "id": "a74b1b7f-71a5-4011-9441-d0b5e4122711", "name": "Radiohead", "sort-name": "Radiohead" } }],
+  "genres": [
+    { "name": "art rock", "count": 12 },
+    { "name": "alternative rock", "count": 20 }
+  ],
+  "relations": [
+    { "type": "wikidata", "target-type": "url", "url": { "resource": "https://www.wikidata.org/wiki/Q213434" } },
+    { "type": "discogs", "target-type": "url", "url": { "resource": "https://www.discogs.com/master/21491" } },
+    { "type": "allmusic", "target-type": "url", "url": { "resource": "https://www.allmusic.com/album/mw0000024289" } }
+  ],
+  "releases": [
+    { "id": "rel-bootleg", "title": "OK Computer", "status": "Bootleg", "date": "1996" },
+    { "id": "rel-us", "title": "OK Computer", "status": "Official", "date": "1997-07-01", "country": "US" },
+    { "id": "rel-jp", "title": "OK Computer", "status": "Official", "date": "1997-05-21", "country": "JP" },
+    { "id": "rel-nodate", "title": "OK Computer", "status": "Official" }
+  ]
+}
