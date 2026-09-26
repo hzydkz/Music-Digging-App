@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { getDb } from "@/db/client";
 import { getReleaseView, touchRelease } from "@/lib/queries";
-import { NO_DATA } from "@/lib/pipeline";
+import { NO_DATA, apiAvailable, getManualPrompt } from "@/lib/pipeline";
 import { Cover } from "@/components/cover";
 import { NoteRunner } from "@/components/note-runner";
 import { NoteText, type NoteSource } from "@/components/note-text";
@@ -59,6 +59,10 @@ export default async function ReleasePage({ params }: PageProps<"/release/[id]">
   const pendingLabel = blocked ? "위에서 문서를 고르면 이어서 작성합니다." : "자료를 모으고 요약하는 중…";
   const discogsJob = state.jobs.find((j) => j.target === "discogs");
   const summary = notes.summary;
+  const fetchesSettled =
+    state.jobs.some((j) => j.type === "fetch") &&
+    state.jobs.filter((j) => j.type === "fetch").every((j) => j.status === "done" || j.status === "failed");
+  const manualPrompt = fetchesSettled ? await getManualPrompt(db, id) : null;
   const background = notes.background;
 
   return (
@@ -88,7 +92,13 @@ export default async function ReleasePage({ params }: PageProps<"/release/[id]">
         </div>
       </header>
 
-      <NoteRunner releaseId={release.id} initial={state} />
+      <NoteRunner
+        releaseId={release.id}
+        initial={state}
+        apiAvailable={apiAvailable()}
+        manualPrompt={manualPrompt}
+        hasNote={Boolean(summary || background)}
+      />
 
       {(summary || writing) && (
         <Section title="한 줄 요약">

@@ -63,19 +63,30 @@ export interface AlbumNoteOutput {
   background: string;
 }
 
-const SYSTEM_PROMPT = `당신은 음악 조사 노트를 한국어로 정리하는 편집자입니다. 사용자는 아래 <source> 문서들만 근거로 한 앨범 노트를 원합니다.
+const RULES = `당신은 음악 조사 노트를 한국어로 정리하는 편집자입니다. 사용자는 아래 <source> 문서들만 근거로 한 앨범 노트를 원합니다.
 
 규칙:
 - <source> 안에 있는 내용만 서술합니다. 문서에 없는 사실, 일반 상식, 추측은 쓰지 않습니다. 이 노트의 가치는 모든 문장을 원문에서 확인할 수 있다는 데 있습니다.
 - 문장마다 끝에 근거 소스를 [소스이름] 형태로 붙입니다. 예: "...녹음했다 [Wikipedia]". 소스 이름은 <source name="..."> 값을 그대로 씁니다.
 - 소스끼리 내용이 다르면 한쪽을 고르지 말고 "Wikipedia는 ~라고, Discogs는 ~라고 함" 식으로 함께 적습니다.
-- 해당 내용에 쓸 자료가 없으면 그 필드에 정확히 "수집된 자료 없음"이라고만 씁니다.
+- 해당 내용에 쓸 자료가 없으면 그 항목에 정확히 "수집된 자료 없음"이라고만 씁니다.
 - 번역투를 피하고 자연스러운 한국어 문장으로 씁니다. 인명·밴드명·곡명·앨범명은 원어 표기를 유지합니다. <glossary>가 있으면 그 표기를 따릅니다.
-- 원문 문장을 길게 그대로 옮기지 말고 요약합니다.
+- 원문 문장을 길게 그대로 옮기지 말고 요약합니다.`;
+
+const SECTIONS = {
+  summary: "이 앨범이 무엇인지 한 문장. 끝에 근거 소스 표기.",
+  background:
+    '제작 배경(결성·작곡·녹음·제작 과정·발매 경위 등). 마크다운 문단 여러 개, 필요하면 "### 소제목" 사용. 평론·차트 성적은 여기서 다루지 않습니다.',
+};
+
+const SYSTEM_PROMPT = `${RULES}
 
 출력 필드:
-- summary: 이 앨범이 무엇인지 한 문장. 끝에 근거 소스 표기.
-- background: 제작 배경(결성·작곡·녹음·제작 과정·발매 경위 등). 마크다운 문단 여러 개, 필요하면 "### 소제목" 사용. 평론·차트 성적은 이 필드에서 다루지 않습니다.`;
+- summary: ${SECTIONS.summary}
+- background: ${SECTIONS.background}`;
+
+/** 수동 모드(claude.ai에 붙여넣기)에서 쓰는 답변 형식의 제목 */
+export const MANUAL_HEADINGS = { summary: "## 한 줄 요약", background: "## 제작 배경" } as const;
 
 const OUTPUT_SCHEMA = {
   type: "object",
@@ -162,4 +173,59 @@ export async function generateAlbumNote(
   }
   const usage: UsageLike = message.usage;
   return { output, model: message.model, usage, cost: estimateCost(message.model, usage) };
+}
+
+/**
+ * 수동 모드: claude.ai 채팅에 그대로 붙여넣을 프롬프트 한 덩어리.
+ * API 모드와 같은 규칙·원문을 쓰고, 출력은 JSON 대신 제목 두 개로 받는다(복사·붙여넣기가 쉬움).
+ */
+export function buildManualPrompt(
+  album: { title: string; artist: string; year: number | null },
+  sources: SourceDoc[],
+  glossary: GlossaryEntry[],
+): string {
+  return `${RULES}
+
+답변 형식: 아래 두 제목만 써서 답하세요. 앞뒤 인사말이나 설명은 붙이지 않습니다.
+
+${MANUAL_HEADINGS.summary}
+(${SECTIONS.summary})
+
+${MANUAL_HEADINGS.background}
+(${SECTIONS.background})
+
+---
+
+${buildUserMessage(album, sources, glossary).replace(/위 자료로 노트를 작성하세요\.$/, "위 자료로 노트를 작성하세요. 답변 형식을 지켜 주세요.")}`;
+}
+
+/**
+ * claude.ai에서 복사해 온 답변을 섹션으로 나눈다.
+ * "## 한 줄 요약" / "## 제작 배경" 제목(# 개수·띄어쓰기·굵게 표시 차이는 허용)을 찾는다.
+ */
+export function parseManualNote(text: string): AlbumNoteOutput {
+  const lines = text.replace(/\r\n/g, "\n").split("\n");
+  const heading = (line: string): "summary" | "background" | null => {
+    const t = line.trim().replace(/^#{1,3}\s*/, "").replace(/\*\*/g, "").replace(/[:：]$/, "").replace(/\s+/g, "");
+    if (!/^#{1,3}\s|^\*\*/.test(line.trim())) return null;
+    if (t === "한줄요약") return "summary";
+    if (t === "제작배경") return "background";
+    return null;
+  };
+  const out: Record<"summary" | "background", string[]> = { summary: [], background: [] };
+  let current: "summary" | "background" | null = null;
+  for (const line of lines) {
+    const h = heading(line);
+    if (h) {
+      current = h;
+      continue;
+    }
+    if (current) out[current].push(line);
+  }
+  const summary = out.summary.join("\n").trim();
+  const background = out.background.join("\n").trim();
+  if (!summary && !background) {
+    throw new LlmError('"## 한 줄 요약", "## 제작 배경" 제목을 찾지 못했습니다. Claude 답변 전체를 복사해서 붙여넣으세요.');
+  }
+  return { summary, background };
 }

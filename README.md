@@ -22,7 +22,7 @@
 | `TURSO_AUTH_TOKEN` | prod 토큰 | preview 토큰 | 환경마다 다른 값 |
 | `APP_PASSWORD` | ✓ | ✓ | 로그인 비밀번호. 인터넷에 공개되므로 길게 |
 | `SESSION_SECRET` | ✓ | ✓ | 아무 긴 랜덤 문자열(40자 이상 권장). 바꾸면 모두 로그아웃됨 |
-| `ANTHROPIC_API_KEY` | ✓ | ✓ | Anthropic Console에서 발급 (구독과 별도 과금) |
+| `ANTHROPIC_API_KEY` | 선택 | 선택 | 없으면 수동 모드만 사용. 넣으면 자동 생성 버튼이 생김 (Anthropic Console, 구독과 별도 과금) |
 | `DISCOGS_TOKEN` | ✓ | ✓ | Discogs → Settings → Developers → Generate token |
 | `MB_CONTACT` | ✓ | ✓ | MusicBrainz User-Agent에 들어갈 연락처(이메일 등). MusicBrainz 요청 규칙 |
 | `MONTHLY_BUDGET_USD` | 선택 | 선택 | 예: `10`. 이번 달 추정 비용이 넘으면 생성 전에 경고 |
@@ -38,9 +38,12 @@
 Safari로 프로덕션 주소 접속 → 공유 버튼 → 홈 화면에 추가. 홈 화면 앱은 Safari와 로그인 쿠키가 분리될 수 있어서 한 번 더 로그인해야 할 수 있습니다.
 
 ## 쓰는 법
-1. 검색창에 앨범 이름 → MusicBrainz 후보 중 선택 (이때는 메타데이터·커버만 가져옴, API 요금 없음)
-2. **노트 만들기** → Wikipedia·Discogs 수집 → Claude로 한국어 노트 작성. 진행 중엔 화면을 열어 두세요. 닫으면 멈추고, 다시 열면 이어서 합니다.
+1. 검색창에 앨범 이름(또는 `아티스트 - 앨범`) → MusicBrainz 후보 중 선택. 메타데이터·커버·트랙만 가져옵니다.
+2. **자료 모으기** → Wikipedia·Discogs 수집. 진행 중엔 화면을 열어 두세요. 닫으면 멈추고, 다시 열면 이어서 합니다.
 3. 어느 문서가 이 앨범인지 애매하면 멈추고 후보를 보여줍니다. 직접 고르거나 "해당 없음"을 누르세요.
+4. 노트 작성은 둘 중 하나:
+   - **수동 모드 (API 요금 없음)**: "프롬프트 복사" → Claude 앱 새 대화에 붙여넣기 → 답변 전체 복사 → 입력칸에 붙여넣고 "노트로 저장"
+   - **자동 생성 (`ANTHROPIC_API_KEY`가 있을 때만)**: "API로 자동 생성" 버튼
 
 ## 구조
 - `src/sources/` 소스별 모듈 (musicbrainz, wikipedia, discogs)

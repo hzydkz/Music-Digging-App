@@ -49,7 +49,20 @@ async function post(url: string, body: unknown = {}) {
  * "노트 만들기" 버튼 + job 실행 루프.
  * 페이지가 열려 있는 동안 /run을 반복 호출한다. 페이지를 닫으면 멈추고, 다시 열면 이어서 진행한다.
  */
-export function NoteRunner({ releaseId, initial }: { releaseId: string; initial: RunState }) {
+export function NoteRunner({
+  releaseId,
+  initial,
+  apiAvailable,
+  manualPrompt,
+  hasNote,
+}: {
+  releaseId: string;
+  initial: RunState;
+  apiAvailable: boolean;
+  /** 수집이 끝났을 때 서버가 만들어 둔 claude.ai용 프롬프트 (서술 자료가 없으면 null) */
+  manualPrompt: string | null;
+  hasNote: boolean;
+}) {
   const router = useRouter();
   const [state, setState] = useState(initial);
   const [error, setError] = useState<string | null>(null);
@@ -100,7 +113,7 @@ export function NoteRunner({ releaseId, initial }: { releaseId: string; initial:
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function start(opts: { refetch?: boolean } = {}) {
+  async function start(opts: { refetch?: boolean; mode: "auto" | "manual" }) {
     setError(null);
     try {
       let res = await post(`/api/releases/${releaseId}/note`, opts);
@@ -138,37 +151,57 @@ export function NoteRunner({ releaseId, initial }: { releaseId: string; initial:
   const busy = busyOf(state) || looping.current;
   const hasJobs = state.jobs.length > 0;
   const choices = state.sources.filter((s) => s.status === "needs_choice" && s.candidates.length);
+  const fetchesSettled =
+    hasJobs &&
+    state.jobs
+      .filter((j) => j.type === "fetch")
+      .every((j) => j.status === "done" || j.status === "failed");
+  const showManual = fetchesSettled && !busy;
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
         {!hasJobs ? (
-          <button
-            type="button"
-            onClick={() => start()}
-            className="h-11 rounded-xl bg-accent px-5 font-semibold text-accent-fg"
-          >
-            노트 만들기
-          </button>
-        ) : (
           <>
             <button
               type="button"
-              disabled={busy}
-              onClick={() => start()}
-              className="h-11 rounded-xl border border-line bg-surface px-4 font-medium disabled:opacity-50"
+              onClick={() => start({ mode: "manual" })}
+              className="h-11 rounded-xl bg-accent px-5 font-semibold text-accent-fg"
             >
-              다시 생성
+              자료 모으기
             </button>
+            {apiAvailable && (
+              <button
+                type="button"
+                onClick={() => start({ mode: "auto" })}
+                className="h-11 rounded-xl border border-line bg-surface px-4 font-medium"
+              >
+                노트 자동 생성 (API)
+              </button>
+            )}
+          </>
+        ) : (
+          <>
+            {apiAvailable && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => start({ mode: "auto" })}
+                className="h-11 rounded-xl border border-line bg-surface px-4 font-medium disabled:opacity-50"
+              >
+                {hasNote ? "API로 다시 생성" : "API로 자동 생성"}
+              </button>
+            )}
             <button
               type="button"
               disabled={busy}
               onClick={() => {
-                if (window.confirm("소스를 다시 수집한 뒤 노트를 새로 만듭니다. 진행할까요?")) start({ refetch: true });
+                if (window.confirm("Wikipedia·Discogs 자료를 다시 수집합니다. 진행할까요?"))
+                  start({ mode: "manual", refetch: true });
               }}
               className="h-11 rounded-xl border border-line bg-surface px-4 font-medium disabled:opacity-50"
             >
-              소스부터 다시
+              자료 다시 모으기
             </button>
           </>
         )}
@@ -176,10 +209,15 @@ export function NoteRunner({ releaseId, initial }: { releaseId: string; initial:
       </div>
       {!hasJobs && (
         <p className="text-sm text-muted">
-          버튼을 누르면 Wikipedia·Discogs 자료를 모아 Claude API로 한국어 노트를 만듭니다(API 요금 발생).
+          자료 모으기: Wikipedia·Discogs 자료를 모은 뒤, claude.ai에 붙여넣을 프롬프트를 만들어 줍니다 (API 요금 없음).
+          {apiAvailable && " 자동 생성: 같은 작업을 Claude API로 바로 합니다 (API 요금 발생)."}
         </p>
       )}
       {error && <p className="text-sm text-danger">{error}</p>}
+
+      {showManual && (
+        <ManualPanel releaseId={releaseId} prompt={manualPrompt} collapsed={hasNote} onSaved={() => router.refresh()} />
+      )}
 
       {choices.map((s) => (
         <div key={s.source} className="rounded-xl border border-accent/50 bg-surface p-4">
@@ -259,6 +297,132 @@ export function NoteRunner({ releaseId, initial }: { releaseId: string; initial:
           </ul>
         </details>
       )}
+    </div>
+  );
+}
+
+/**
+ * 수동 모드: 프롬프트 복사 → claude.ai에 붙여넣기 → 답변을 다시 붙여넣어 저장.
+ * Safari는 클릭 처리 중 await 뒤에 클립보드 쓰기를 막으므로, 프롬프트는 미리 받아 둔 것을 바로 복사한다.
+ */
+function ManualPanel({
+  releaseId,
+  prompt,
+  collapsed,
+  onSaved,
+}: {
+  releaseId: string;
+  prompt: string | null;
+  collapsed: boolean;
+  onSaved: () => void;
+}) {
+  const [copied, setCopied] = useState<"ok" | "failed" | null>(null);
+  const [answer, setAnswer] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  if (!prompt) {
+    return (
+      <p className="rounded-xl border border-line bg-surface p-4 text-sm text-muted">
+        Wikipedia·Discogs에서 서술 자료를 찾지 못해 노트를 만들 수 없습니다. 아래 소스 상태에서 다시 시도해 보세요.
+      </p>
+    );
+  }
+
+  function copy() {
+    navigator.clipboard.writeText(prompt!).then(
+      () => setCopied("ok"),
+      () => setCopied("failed"),
+    );
+  }
+
+  async function save() {
+    setSaving(true);
+    setError(null);
+    try {
+      await post(`/api/releases/${releaseId}/manual`, { text: answer });
+      setAnswer("");
+      setCopied(null);
+      onSaved();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const body = (
+    <ol className="space-y-4">
+      <li>
+        <p className="mb-2">
+          <strong>1.</strong> 프롬프트를 복사합니다 <span className="text-sm text-muted">({prompt.length.toLocaleString()}자)</span>
+        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <button type="button" onClick={copy} className="h-11 rounded-xl bg-accent px-4 font-semibold text-accent-fg">
+            프롬프트 복사
+          </button>
+          {copied === "ok" && <span className="text-sm text-ok">복사됨</span>}
+        </div>
+        {copied === "failed" && (
+          <div className="mt-2">
+            <p className="mb-1 text-sm text-danger">자동 복사가 막혔습니다. 아래 칸을 길게 눌러 전체 선택 후 복사하세요.</p>
+            <textarea
+              readOnly
+              value={prompt}
+              onFocus={(e) => e.currentTarget.select()}
+              className="h-32 w-full rounded-lg border border-line bg-bg p-2 text-sm"
+            />
+          </div>
+        )}
+      </li>
+      <li>
+        <p className="mb-2">
+          <strong>2.</strong> Claude 앱(또는 claude.ai)의 새 대화에 붙여넣고 보냅니다.
+        </p>
+        <a
+          href="https://claude.ai/new"
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex h-11 items-center rounded-xl border border-line bg-bg px-4 font-medium"
+        >
+          claude.ai 열기
+        </a>
+      </li>
+      <li>
+        <p className="mb-2">
+          <strong>3.</strong> Claude 답변 전체를 복사해서 여기에 붙여넣고 저장합니다.
+        </p>
+        <textarea
+          value={answer}
+          onChange={(e) => setAnswer(e.target.value)}
+          placeholder={"## 한 줄 요약\n…\n\n## 제작 배경\n…"}
+          className="h-48 w-full rounded-lg border border-line bg-bg p-3 text-[16px] outline-none focus:border-accent"
+        />
+        {error && <p className="mt-1 text-sm text-danger">{error}</p>}
+        <button
+          type="button"
+          disabled={saving || !answer.trim()}
+          onClick={save}
+          className="mt-2 h-11 rounded-xl bg-accent px-5 font-semibold text-accent-fg disabled:opacity-50"
+        >
+          {saving ? "저장 중…" : "노트로 저장"}
+        </button>
+      </li>
+    </ol>
+  );
+
+  if (collapsed) {
+    return (
+      <details className="rounded-xl border border-line bg-surface px-4 py-2">
+        <summary className="flex min-h-11 cursor-pointer items-center font-medium">claude.ai로 노트 다시 쓰기</summary>
+        <div className="pb-3">{body}</div>
+      </details>
+    );
+  }
+  return (
+    <div className="rounded-xl border border-accent/50 bg-surface p-4">
+      <p className="mb-3 font-semibold">claude.ai로 노트 만들기</p>
+      {body}
     </div>
   );
 }

@@ -191,6 +191,44 @@ describe("pipeline", () => {
     expect(await db.query.sourceRaw.findFirst({ where: eq(sourceRaw.source, "discogs") })).toBeUndefined();
   });
 
+  it("수동 모드: 수집만 하고 LLM을 부르지 않으며, 붙여넣은 답변을 저장", { timeout: 20_000 }, async () => {
+    stubFetch([
+      [/musicbrainz\.org\/ws\/2\/release-group\//, fixture("mb-release-group.json")],
+      [/musicbrainz\.org\/ws\/2\/release\//, fixture("mb-release.json")],
+      [/wikidata\.org/, fixture("wikidata-sitelinks.json")],
+      [/en\.wikipedia\.org.*prop=extracts/, fixture("wiki-extract.json")],
+      [/api\.discogs\.com\/releases\/1234567/, fixture("discogs-release.json")],
+    ]);
+    const { db } = ctx;
+    process.env.MONTHLY_BUDGET_USD = "0.01";
+    await pipeline.recordUsage(db, 1, 1, 5); // 예산 초과 상태여도 수동 모드는 막지 않는다
+    await pipeline.importReleaseGroup(db, RG);
+
+    expect(await pipeline.getManualPrompt(db, RG)).toBeNull(); // 서술 자료 수집 전
+    expect(await pipeline.startNote(db, RG, { mode: "manual" })).toEqual({ ok: true });
+    expect(await runAll(db, RG)).toEqual(["fetch:wikipedia", "fetch:discogs"]);
+    expect(generateAlbumNote).not.toHaveBeenCalled();
+    expect((await db.query.releases.findFirst({ where: eq(releases.id, RG) }))?.noteStatus).toBe("none");
+
+    const prompt = await pipeline.getManualPrompt(db, RG);
+    expect(prompt).toContain('<source name="Wikipedia"');
+    expect(prompt).toContain('<source name="Discogs"');
+
+    await expect(pipeline.saveManualNote(db, RG, "형식 없는 글")).rejects.toThrow();
+    await pipeline.saveManualNote(db, RG, "## 한 줄 요약\n요약 [Wikipedia]\n\n## 제작 배경\n배경 [Discogs]");
+    const bg = await db.query.notes.findFirst({ where: eq(notes.section, "background") });
+    expect(bg?.contentKo).toBe("배경 [Discogs]");
+    expect(bg?.model).toBe(pipeline.MANUAL_MODEL_LABEL);
+    expect(JSON.parse(bg!.sourcesJson).map((s: { label: string }) => s.label).sort()).toEqual(["Discogs", "MusicBrainz", "Wikipedia"]);
+    expect((await db.query.releases.findFirst({ where: eq(releases.id, RG) }))?.noteStatus).toBe("ready");
+
+    // 이후 자동 생성으로 전환하면 summarize job만 추가된다 (저장된 원문 재사용)
+    process.env.MONTHLY_BUDGET_USD = "";
+    llmOk();
+    await pipeline.startNote(db, RG, { mode: "auto" });
+    expect(await runAll(db, RG)).toEqual(["summarize:album"]);
+  });
+
   it("월 예산을 넘으면 생성 전에 멈추고, force면 진행", async () => {
     const { db } = ctx;
     process.env.MONTHLY_BUDGET_USD = "1";

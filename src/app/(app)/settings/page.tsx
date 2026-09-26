@@ -36,12 +36,15 @@ export default async function SettingsPage() {
         <ul className="divide-y divide-line rounded-xl border border-line bg-surface">
           {KEYS.map(([k, label]) => {
             const set = Boolean(process.env[k]?.trim());
+            const optional = k === "ANTHROPIC_API_KEY";
             return (
               <li key={k} className="flex min-h-11 items-center justify-between px-4 py-2">
                 <span>
                   {label} <span className="text-sm text-muted">{k}</span>
                 </span>
-                <span className={set ? "text-ok" : "text-danger"}>{set ? "설정됨" : "없음"}</span>
+                <span className={set ? "text-ok" : optional ? "text-muted" : "text-danger"}>
+                  {set ? "설정됨" : optional ? "없음 (수동 모드)" : "없음"}
+                </span>
               </li>
             );
           })}
@@ -50,6 +53,9 @@ export default async function SettingsPage() {
 
       <section>
         <h2 className="mb-2 text-lg font-semibold">Claude API 사용량</h2>
+        <p className="mb-1 text-sm text-muted">
+          수동 모드(claude.ai에 붙여넣기)로 만든 노트는 API를 쓰지 않아 여기 집계되지 않습니다.
+        </p>
         <p>
           모델 <code>{cfg.model}</code> · effort <code>{cfg.effort}</code> · 폴백 {cfg.fallbacks ? "켜짐" : "꺼짐"}
         </p>

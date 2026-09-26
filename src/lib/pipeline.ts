@@ -24,7 +24,7 @@ import {
 import * as mb from "@/sources/musicbrainz";
 import * as wiki from "@/sources/wikipedia";
 import * as discogs from "@/sources/discogs";
-import { generateAlbumNote, type SourceDoc } from "./llm";
+import { buildManualPrompt, generateAlbumNote, parseManualNote, type SourceDoc } from "./llm";
 
 export const ENTITY = "release";
 export const FETCH_SOURCES = ["wikipedia", "discogs"] as const;
@@ -160,20 +160,30 @@ export type StartResult =
   | { ok: true }
   | { ok: false; reason: "budget"; spend: number; budget: number };
 
+export type NoteMode = "auto" | "manual";
+
+export function apiAvailable(): boolean {
+  return Boolean(process.env.ANTHROPIC_API_KEY?.trim());
+}
+
+/**
+ * auto: 수집 후 Claude API로 노트 작성 (요금 발생)
+ * manual: 수집만 하고, 노트는 사용자가 claude.ai에서 받아 붙여넣는다 (API 요금 없음)
+ */
 export async function startNote(
   db: DB,
   releaseId: string,
-  { force = false, refetch = false } = {},
+  { force = false, refetch = false, mode = "auto" as NoteMode } = {},
 ): Promise<StartResult> {
   const budget = monthlyBudget();
-  if (budget !== null && !force) {
+  if (mode === "auto" && budget !== null && !force) {
     const spend = await monthSpend(db);
     if (spend >= budget) return { ok: false, reason: "budget", spend, budget };
   }
   const now = Date.now();
   const wanted = [
     ...FETCH_SOURCES.map((s) => ({ type: "fetch" as const, target: s })),
-    { type: "summarize" as const, target: SUMMARY_SECTION },
+    ...(mode === "auto" ? [{ type: "summarize" as const, target: SUMMARY_SECTION }] : []),
   ];
   for (const w of wanted) {
     const existing = await db.query.jobs.findFirst({
@@ -197,10 +207,12 @@ export async function startNote(
         .where(eq(jobs.id, existing.id));
     }
   }
-  await db
-    .update(releases)
-    .set({ noteStatus: "building" })
-    .where(eq(releases.id, releaseId));
+  if (mode === "auto") {
+    await db
+      .update(releases)
+      .set({ noteStatus: "building" })
+      .where(eq(releases.id, releaseId));
+  }
   return { ok: true };
 }
 
@@ -521,7 +533,7 @@ const SOURCE_LABELS: Record<string, string> = {
   musicbrainz: "MusicBrainz",
 };
 
-async function summarizeAlbum(db: DB, release: Release) {
+async function collectSources(db: DB, release: Release) {
   const raws = await db.query.sourceRaw.findMany({
     where: and(eq(sourceRaw.entityType, ENTITY), eq(sourceRaw.entityId, release.id)),
   });
@@ -531,10 +543,18 @@ async function summarizeAlbum(db: DB, release: Release) {
     url: r.url,
     text: r.rawText!,
   }));
-  const sourcesJson = JSON.stringify(docs.map((d) => ({ label: d.label, url: d.url })));
+  return {
+    docs,
+    sourcesJson: JSON.stringify(docs.map((d) => ({ label: d.label, url: d.url }))),
+    // 서술 소스(Wikipedia/Discogs)가 하나라도 있는가
+    hasNarrative: ok.some((r) => r.source !== "musicbrainz"),
+  };
+}
 
-  // 서술 소스(Wikipedia/Discogs)가 하나도 없으면 LLM을 호출하지 않는다.
-  const hasNarrative = ok.some((r) => r.source !== "musicbrainz");
+async function summarizeAlbum(db: DB, release: Release) {
+  const { docs, sourcesJson, hasNarrative } = await collectSources(db, release);
+
+  // 서술 소스가 하나도 없으면 LLM을 호출하지 않는다.
   if (!hasNarrative) {
     await saveNote(db, release.id, "summary", NO_DATA, "[]", null);
     await saveNote(db, release.id, "background", NO_DATA, "[]", null);
@@ -552,6 +572,35 @@ async function summarizeAlbum(db: DB, release: Release) {
     (result.usage.cache_read_input_tokens ?? 0), result.usage.output_tokens, result.cost);
   await saveNote(db, release.id, "summary", result.output.summary.trim() || NO_DATA, sourcesJson, result.model);
   await saveNote(db, release.id, "background", result.output.background.trim() || NO_DATA, sourcesJson, result.model);
+}
+
+// ---- 수동 모드 ----
+
+export const MANUAL_MODEL_LABEL = "claude.ai (수동)";
+
+/** claude.ai에 붙여넣을 프롬프트. 서술 소스가 없으면 null. */
+export async function getManualPrompt(db: DB, releaseId: string): Promise<string | null> {
+  const release = await db.query.releases.findFirst({ where: eq(releases.id, releaseId) });
+  if (!release) return null;
+  const { docs, hasNarrative } = await collectSources(db, release);
+  if (!hasNarrative) return null;
+  const gloss = await db.select().from(glossary);
+  return buildManualPrompt(
+    { title: release.title, artist: release.artistCredit, year: release.year },
+    docs,
+    gloss,
+  );
+}
+
+/** 사용자가 claude.ai에서 복사해 온 답변을 노트로 저장한다. */
+export async function saveManualNote(db: DB, releaseId: string, text: string) {
+  const release = await db.query.releases.findFirst({ where: eq(releases.id, releaseId) });
+  if (!release) throw new Error("앨범 정보를 찾을 수 없습니다.");
+  const parsed = parseManualNote(text);
+  const { sourcesJson } = await collectSources(db, release);
+  await saveNote(db, releaseId, "summary", parsed.summary || NO_DATA, sourcesJson, MANUAL_MODEL_LABEL);
+  await saveNote(db, releaseId, "background", parsed.background || NO_DATA, sourcesJson, MANUAL_MODEL_LABEL);
+  await db.update(releases).set({ noteStatus: "ready" }).where(eq(releases.id, releaseId));
 }
 
 async function saveNote(
